@@ -17,7 +17,7 @@ echo.
 echo ===============================================
 echo.
 
-python fishing_bot.py
+C:\Users\vdesg\AppData\Local\Python\bin\python.exe fishing_bot.py
 
 if errorlevel 1 (
     echo.

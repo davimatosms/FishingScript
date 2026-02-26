@@ -4,7 +4,7 @@ echo   BOT DE PESCA - PRODIGY RP
 echo ===============================================
 echo.
 echo Verificando Python...
-python --version
+C:\Users\vdesg\AppData\Local\Python\bin\python.exe --version
 if errorlevel 1 (
     echo ERRO: Python nao encontrado!
     echo Instale Python 3.8+ de https://python.org
@@ -14,7 +14,7 @@ if errorlevel 1 (
 
 echo.
 echo Instalando dependencias...
-pip install -r requirements.txt
+C:\Users\vdesg\AppData\Local\Python\bin\python.exe -m pip install -r requirements.txt
 
 echo.
 echo ===============================================
