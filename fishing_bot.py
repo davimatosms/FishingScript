@@ -3,6 +3,7 @@ Bot de Pesca Automatizado para GTA RP
 AVISO: Use por sua conta e risco. Pode violar termos de serviço.
 """
 import pyautogui
+import pydirectinput
 import time
 import keyboard
 import cv2
@@ -23,12 +24,12 @@ class FishingBot:
         pyautogui.PAUSE = 0.1
         
         print("Bot de Pesca Inicializado!")
-        print("Pressione F6 para iniciar/pausar")
+        print("Pressione J para iniciar/pausar")
         print("Pressione ESC para parar completamente")
         
     def start(self):
         """Inicia o bot"""
-        keyboard.add_hotkey('f6', self.toggle_bot)
+        keyboard.add_hotkey('j', self.toggle_bot)
         keyboard.add_hotkey('esc', self.stop_bot)
         
         print("\n[INFO] Bot pronto! Aguardando comando...")
@@ -53,13 +54,13 @@ class FishingBot:
     def equip_fishing_rod(self):
         """Equipa a vara de pescar (tecla 1)"""
         print("[1/5] Equipando vara de pescar...")
-        keyboard.press_and_release(self.config.FISHING_ROD_KEY)
+        pydirectinput.press(self.config.FISHING_ROD_KEY)
         time.sleep(2)  # Aguardar animação
         
     def cast_line(self):
         """Joga a isca na água (tecla E)"""
         print("[2/5] Lançando isca...")
-        keyboard.press_and_release(self.config.CAST_KEY)
+        pydirectinput.press(self.config.CAST_KEY)
         time.sleep(2)
         
     def wait_for_minigame(self):
@@ -80,7 +81,7 @@ class FishingBot:
         return False
         
     def play_minigame(self):
-        """Executa o minigame de seguir o círculo branco"""
+        """Executa o minigame de seguir a borda branca do círculo"""
         print("[4/5] Jogando minigame...")
         start_time = time.time()
         movements = 0
@@ -91,7 +92,7 @@ class FishingBot:
                 self.config.MINIGAME_REGION
             )
             
-            # Encontra a posição do círculo branco
+            # Encontra a posição da borda branca (centro do círculo alvo)
             target_pos = self.fish_detector.find_white_circle_position(screenshot)
             
             if target_pos:
@@ -117,7 +118,7 @@ class FishingBot:
         # Verificar sucesso
         if self.fish_detector.detect_success():
             print("[✓✓✓] SUCESSO! Coletando peixe...")
-            keyboard.press_and_release(self.config.COLLECT_KEY)
+            pydirectinput.press(self.config.COLLECT_KEY)
             time.sleep(2)
             self.fish_caught += 1
             return True
@@ -129,7 +130,7 @@ class FishingBot:
         
         # Se não detectou nada, assumir sucesso por segurança
         print("[?] Resultado incerto, assumindo sucesso...")
-        keyboard.press_and_release(self.config.COLLECT_KEY)
+        pydirectinput.press(self.config.COLLECT_KEY)
         time.sleep(2)
         return True
     

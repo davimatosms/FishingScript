@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 import pyautogui
 import keyboard
+import time
 from vision import ScreenCapture
 
 class Calibrator:
@@ -19,18 +20,38 @@ class Calibrator:
     def select_region(self):
         """Interface interativa para selecionar região da tela"""
         print("\n=== CALIBRAÇÃO DE REGIÃO ===")
-        print("1. Pressione ESPAÇO para capturar a tela")
-        print("2. Clique e arraste para selecionar a região do minigame")
-        print("3. A região será salva automaticamente")
+        print("Vá para o jogo e inicie o minigame de pesca!")
+        print("A tela será capturada automaticamente em 5 segundos...")
+        print("")
         
-        keyboard.wait('space')
+        # Countdown
+        for i in range(5, 0, -1):
+            print(f"Capturando em {i}...", end='\r', flush=True)
+            time.sleep(1)
+        
+        print("\n✓ Capturando tela!")
         
         # Captura screenshot
         screenshot = self.capture.capture()
         self.current_screenshot = screenshot.copy()
         
-        # Cria janela
-        cv2.namedWindow('Selecione a Região')
+        # Salvar screenshot para referência
+        cv2.imwrite('screenshot_calibration.png', screenshot)
+        
+        print("✓ Tela capturada!")
+        print("✓ Screenshot salva como 'screenshot_calibration.png'")
+        print("\nAbrindo janela de seleção...")
+        print("Se a janela não aparecer, ALT+TAB para encontrá-la!")
+        print("\nNa janela que abrir:")
+        print("1. Clique e arraste para selecionar a região circular do minigame")
+        print("2. Pressione ENTER para confirmar")
+        print("3. Pressione ESC para cancelar")
+        
+        time.sleep(1)  # Pequeno delay para dar tempo de ler
+        
+        # Cria janela com flags para ficar na frente
+        cv2.namedWindow('Selecione a Região', cv2.WINDOW_NORMAL)
+        cv2.resizeWindow('Selecione a Região', 1280, 720)
         cv2.setMouseCallback('Selecione a Região', self.mouse_callback)
         
         while True:
@@ -84,11 +105,17 @@ class Calibrator:
     def detect_color_at_click(self):
         """Detecta a cor HSV de onde você clica"""
         print("\n=== CALIBRAÇÃO DE COR ===")
-        print("1. Pressione ESPAÇO para capturar a tela")
-        print("2. Clique no elemento que quer detectar (peixe, indicador, etc)")
-        print("3. A cor HSV será exibida")
+        print("Vá para o jogo com o elemento visível na tela!")
+        print("A tela será capturada automaticamente em 5 segundos...")
+        print("")
         
-        keyboard.wait('space')
+        # Countdown
+        for i in range(5, 0, -1):
+            print(f"Capturando em {i}...", end='\r', flush=True)
+            time.sleep(1)
+        
+        print("\n✓ Capturando tela!")
+        print("Clique no elemento que quer detectar (peixe, círculo branco, etc)")
         
         screenshot = self.capture.capture()
         hsv_screenshot = cv2.cvtColor(screenshot, cv2.COLOR_BGR2HSV)
@@ -138,21 +165,21 @@ class Calibrator:
             screenshot = self.capture.capture_region(config.MINIGAME_REGION)
             hsv = cv2.cvtColor(screenshot, cv2.COLOR_BGR2HSV)
             
-            # Detectar círculo branco
-            lower = np.array(config.WHITE_CIRCLE_LOWER)
-            upper = np.array(config.WHITE_CIRCLE_UPPER)
+            # Detectar borda branca do círculo (único diferencial do peixe alvo)
+            lower = np.array(config.TARGET_CIRCLE_LOWER)
+            upper = np.array(config.TARGET_CIRCLE_UPPER)
             
             mask = cv2.inRange(hsv, lower, upper)
             result = cv2.bitwise_and(screenshot, screenshot, mask=mask)
             
-            # Encontrar posição do círculo branco
+            # Encontrar posição do centro do círculo (borda branca)
             pos = detector.find_white_circle_position(screenshot)
             
             # Desenhar marcador se encontrou
             display = screenshot.copy()
             if pos:
                 cv2.circle(display, pos, 10, (0, 255, 0), 2)
-                cv2.putText(display, f"X:{pos[0]} Y:{pos[1]}", (pos[0]+15, pos[1]), 
+                cv2.putText(display, f"CIRCULO X:{pos[0]} Y:{pos[1]}", (pos[0]+15, pos[1]), 
                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
                     
             cv2.imshow('Original', display)
@@ -166,9 +193,13 @@ class Calibrator:
         
     def get_screen_coordinates(self):
         """Mostra as coordenadas do mouse em tempo real"""
-        print("\n=== COORDENADAS DO MOUSE ===")
-        print("Mova o mouse pela tela")
-        print("Pressione ESC para sair")
+        print("\n=== COORDENADAS DO MOUSE (MÉTODO MANUAL) ===")
+        print("\nVá para o jogo e posicione o mouse nos cantos do círculo do minigame:")
+        print("1. Canto SUPERIOR ESQUERDO do círculo")
+        print("2. Canto INFERIOR DIREITO do círculo")
+        print("\nAnote as coordenadas X e Y de cada posição")
+        print("\nPressione CTRL+C para sair quando terminar\n")
+        print("-" * 50)
         
         try:
             while True:
@@ -181,7 +212,20 @@ class Calibrator:
         except KeyboardInterrupt:
             pass
             
-        print("\n")
+        print("\n\n" + "="*50)
+        print("COMO CALCULAR A REGIÃO:")
+        print("="*50)
+        print("\nSuponha que você anotou:")
+        print("  Canto superior esquerdo: X=800, Y=300")
+        print("  Canto inferior direito:  X=1100, Y=600")
+        print("\nCalcule:")
+        print("  x = 800 (canto esquerdo)")
+        print("  y = 300 (canto superior)")
+        print("  largura = 1100 - 800 = 300")
+        print("  altura = 600 - 300 = 300")
+        print("\nNo config.py, use:")
+        print("  MINIGAME_REGION = (800, 300, 300, 300)")
+        print("="*50 + "\n")
 
 
 def main():
@@ -191,10 +235,10 @@ def main():
         print("\n" + "="*50)
         print("FERRAMENTA DE CALIBRAÇÃO - BOT DE PESCA")
         print("="*50)
-        print("\n1. Selecionar região do minigame")
+        print("\n1. Selecionar região do minigame (automático)")
         print("2. Detectar cor (peixe/indicador)")
         print("3. Testar detecção em tempo real")
-        print("4. Ver coordenadas do mouse")
+        print("4. Ver coordenadas do mouse (método manual - RECOMENDADO se opção 1 falhar)")
         print("5. Sair")
         
         choice = input("\nEscolha uma opção: ")

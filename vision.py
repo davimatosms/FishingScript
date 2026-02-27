@@ -74,7 +74,7 @@ class FishDetector:
     
     def find_white_circle_position(self, screenshot):
         """
-        Encontra a posição do círculo branco no minigame (alvo)
+        Encontra a posição da BORDA BRANCA do círculo (alvo único)
         Retorna (x, y) ou None
         """
         from config import Config
@@ -82,24 +82,25 @@ class FishDetector:
         
         hsv = cv2.cvtColor(screenshot, cv2.COLOR_BGR2HSV)
         
-        # Detectar círculo branco
-        lower = np.array(config.WHITE_CIRCLE_LOWER)
-        upper = np.array(config.WHITE_CIRCLE_UPPER)
+        # Detectar APENAS borda branca
+        lower = np.array(config.TARGET_CIRCLE_LOWER)
+        upper = np.array(config.TARGET_CIRCLE_UPPER)
         mask = cv2.inRange(hsv, lower, upper)
         
-        # Aplicar blur para reduzir ruído
+        # NÃO aplicar morfologia - queremos manter as bordas finas!
+        # Blur leve para suavizar e estabilizar detecção
         mask = cv2.GaussianBlur(mask, (5, 5), 0)
         
-        # Encontrar círculos usando HoughCircles
+        # Encontrar círculos (borda branca forma um círculo)
         circles = cv2.HoughCircles(
             mask, 
             cv2.HOUGH_GRADIENT, 
             dp=1, 
-            minDist=50,
-            param1=50, 
-            param2=15,
-            minRadius=10, 
-            maxRadius=50
+            minDist=50,     # Distância mínima entre círculos
+            param1=30,      # Reduzido para detectar bordas mais fracas
+            param2=12,      # Reduzido para aceitar círculos menos perfeitos
+            minRadius=8,    # Raio mínimo da borda
+            maxRadius=40    # Raio máximo da borda
         )
         
         if circles is not None:
@@ -108,21 +109,31 @@ class FishDetector:
             x, y, r = circles[0][0]
             return (int(x), int(y))
         
-        # Fallback: usar contornos se não encontrar círculos
+        # Fallback: usar contornos para encontrar o centro do círculo
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
         if contours:
-            # Filtrar contornos muito pequenos
-            valid_contours = [c for c in contours if cv2.contourArea(c) > 100]
+            from config import Config
+            config = Config()
+            
+            # Filtrar contornos por área mínima
+            valid_contours = [c for c in contours if cv2.contourArea(c) > config.DETECTION_THRESHOLD]
             
             if valid_contours:
-                # Pegar o maior contorno
-                largest = max(valid_contours, key=cv2.contourArea)
-                M = cv2.moments(largest)
-                if M["m00"] != 0:
-                    cx = int(M["m10"] / M["m00"])
-                    cy = int(M["m01"] / M["m00"])
-                    return (cx, cy)
+                # Pegar todos os contornos válidos e calcular o centro médio
+                all_points = []
+                for contour in valid_contours:
+                    M = cv2.moments(contour)
+                    if M["m00"] != 0:
+                        cx = int(M["m10"] / M["m00"])
+                        cy = int(M["m01"] / M["m00"])
+                        all_points.append((cx, cy))
+                
+                if all_points:
+                    # Retornar o ponto médio de todos os contornos (centro do círculo)
+                    avg_x = int(sum(p[0] for p in all_points) / len(all_points))
+                    avg_y = int(sum(p[1] for p in all_points) / len(all_points))
+                    return (avg_x, avg_y)
         
         return None
     
@@ -173,9 +184,9 @@ class FishDetector:
         
     def calibrate_white_circle_tracking(self):
         """
-        Função auxiliar para calibrar o rastreamento do círculo branco
+        Função auxiliar para calibrar o rastreamento da borda branca
         """
-        print("Calibrando rastreamento do círculo branco...")
+        print("Calibrando rastreamento da borda branca do círculo...")
         print("Durante o minigame, pressione ESPAÇO")
         
         import keyboard
@@ -185,9 +196,9 @@ class FishDetector:
         keyboard.wait('space')
         
         screenshot = self.screen_capture.capture_region(config.MINIGAME_REGION)
-        cv2.imwrite('white_circle.png', screenshot)
-        print("Screenshot salvo como 'white_circle.png'")
-        print("Analise para verificar a detecção do círculo branco")
+        cv2.imwrite('white_border.png', screenshot)
+        print("Screenshot salvo como 'white_border.png'")
+        print("Analise para verificar a detecção da borda branca")
         
 
 class ColorDetector:
