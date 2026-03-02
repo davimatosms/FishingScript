@@ -42,8 +42,8 @@ def build_mask(screenshot, lower, upper):
 
 def find_target(mask, config):
     """Encontra o peixe pelo maior blob na máscara (mesmo algoritmo do vision.py)"""
-    # Morfologia: fecha buracos no blob
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    # Morfologia: fecha buracos no blob (kernel 7x7 igual ao vision.py)
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
     mask   = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
 
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -51,10 +51,11 @@ def find_target(mask, config):
     if not contours:
         return None, 0, ""
 
-    largest = max(contours, key=cv2.contourArea)
-    area    = cv2.contourArea(largest)
+    largest  = max(contours, key=cv2.contourArea)
+    area     = cv2.contourArea(largest)
+    min_area = getattr(config, 'FISH_MIN_AREA', 30)
 
-    if area < 30:
+    if area < min_area:
         return None, 0, f"blob muito pequeno ({area:.0f}px)"
 
     M = cv2.moments(largest)

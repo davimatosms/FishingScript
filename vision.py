@@ -122,6 +122,8 @@ class FishDetector:
     def __init__(self):
         self.screen_capture = ScreenCapture()
         self.last_notification_check = 0
+        self._last_fish_pos   = None  # última posição conhecida do peixe
+        self._frames_lost     = 0     # frames consecutivos sem detecção
         
     def detect_minigame_started(self):
         """
@@ -161,47 +163,73 @@ class FishDetector:
         cyan_pixels = np.sum(mask > 0)
         return cyan_pixels > 500  # Se houver notificação azul
     
+    def _detect_blob(self, hsv, lower, upper, min_area):
+        """Tenta detectar o maior blob dentro de um range HSV. Retorna (cx,cy) ou None."""
+        mask = cv2.inRange(hsv, np.array(lower), np.array(upper))
+
+        # Morfologia 7x7: fecha buracos maiores no blob do peixe
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+        mask   = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return None
+
+        largest = max(contours, key=cv2.contourArea)
+        if cv2.contourArea(largest) < min_area:
+            return None
+
+        M = cv2.moments(largest)
+        if M["m00"] == 0:
+            return None
+
+        return (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))
+
     def find_white_circle_position(self, screenshot):
         """
         Encontra a posição do PEIXE (blob escuro) dentro do minigame.
-        Usa detecção por cor HSV + maior contorno (blob sólido).
+        Estratégia:
+          1. Tenta com range estrito (calibrado)
+          2. Se falhar, tenta com range relaxado
+          3. Se ambos falharem, reutiliza a última posição conhecida
+             por até FISH_LOST_FRAMES frames (evita tremida do mouse)
         Retorna (x, y) ou None.
         """
         from config import Config
         config = Config()
 
-        hsv = cv2.cvtColor(screenshot, cv2.COLOR_BGR2HSV)
+        hsv      = cv2.cvtColor(screenshot, cv2.COLOR_BGR2HSV)
+        min_area = getattr(config, 'FISH_MIN_AREA', 30)
 
-        lower = np.array(config.TARGET_CIRCLE_LOWER)
-        upper = np.array(config.TARGET_CIRCLE_UPPER)
-        mask  = cv2.inRange(hsv, lower, upper)
+        # Passo 1 — range estrito
+        pos = self._detect_blob(hsv,
+                                config.TARGET_CIRCLE_LOWER,
+                                config.TARGET_CIRCLE_UPPER,
+                                min_area)
 
-        # Morfologia: fecha buracos pequenos no blob do peixe
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-        mask   = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+        # Passo 2 — range relaxado (fallback de cor)
+        if pos is None and hasattr(config, 'TARGET_CIRCLE_LOWER2'):
+            pos = self._detect_blob(hsv,
+                                    config.TARGET_CIRCLE_LOWER2,
+                                    config.TARGET_CIRCLE_UPPER2,
+                                    min_area)
 
-        # Encontrar contornos
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if pos is not None:
+            # Detecção OK — atualizar estado
+            self._last_fish_pos = pos
+            self._frames_lost   = 0
+            return pos
 
-        if not contours:
-            return None
+        # Passo 3 — usar última posição conhecida por até FISH_LOST_FRAMES frames
+        max_lost = getattr(config, 'FISH_LOST_FRAMES', 8)
+        if self._last_fish_pos is not None and self._frames_lost < max_lost:
+            self._frames_lost += 1
+            return self._last_fish_pos
 
-        # Pegar o MAIOR contorno (é o peixe)
-        largest = max(contours, key=cv2.contourArea)
-        area    = cv2.contourArea(largest)
-
-        # Ignorar ruído — mínimo de 30 pixels de área
-        if area < 30:
-            return None
-
-        # Centroide do blob
-        M = cv2.moments(largest)
-        if M["m00"] == 0:
-            return None
-
-        cx = int(M["m10"] / M["m00"])
-        cy = int(M["m01"] / M["m00"])
-        return (cx, cy)
+        # Peixe realmente perdido
+        self._last_fish_pos = None
+        self._frames_lost   = 0
+        return None
     
     def detect_success(self):
         """

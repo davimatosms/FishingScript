@@ -62,9 +62,21 @@ class Config:
     
     # COR DO PEIXE ALVO - calibrado via debug_vision
     # Azul-preto saturado: corpo escuro do peixe no minigame
-    # H=91-121 (azul-esverdeado), S=154-234 (muito saturado), V=0-65 (escuro/preto)
+    # H=91-121 (azul-esverdeado), S=154-234 (muito saturado), V=0-100
+    # V ampliado de 65->100 para cobrir variacao de brilho frame-a-frame
     TARGET_CIRCLE_LOWER = [91, 154, 0]
-    TARGET_CIRCLE_UPPER = [121, 234, 65]
+    TARGET_CIRCLE_UPPER = [121, 234, 100]
+
+    # Segunda faixa (relaxada) usada como fallback se a primeira nao detectar
+    # S e V mais amplos para capturar frames com leve variacao de cor
+    TARGET_CIRCLE_LOWER2 = [85, 100, 0]
+    TARGET_CIRCLE_UPPER2 = [130, 255, 120]
+
+    # Minimo de pixels (area) para considerar blob como peixe valido
+    FISH_MIN_AREA = 30
+
+    # Frames consecutivos sem deteccao antes de descartar ultima posicao conhecida
+    FISH_LOST_FRAMES = 8
     
     # Círculo azul do minigame (fundo)
     BLUE_CIRCLE_LOWER = [90, 80, 80]
