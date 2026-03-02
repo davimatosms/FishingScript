@@ -1,13 +1,15 @@
 """
 Script de Calibração
 Use este script para configurar as regiões e cores corretas
+Suporte a modo janela: usa coordenadas relativas à janela do jogo
 """
 import cv2
 import numpy as np
 import pyautogui
 import keyboard
 import time
-from vision import ScreenCapture
+from vision import ScreenCapture, find_game_window
+from config import Config
 
 class Calibrator:
     def __init__(self):
@@ -18,10 +20,22 @@ class Calibrator:
         self.current_screenshot = None
         
     def select_region(self):
-        """Interface interativa para selecionar região da tela"""
+        """Interface interativa para selecionar região da tela (relativa à janela do jogo)"""
         print("\n=== CALIBRAÇÃO DE REGIÃO ===")
         print("Vá para o jogo e inicie o minigame de pesca!")
-        print("A tela será capturada automaticamente em 5 segundos...")
+        
+        config = Config()
+        
+        # Verificar se encontra a janela do jogo
+        window = find_game_window(config.GAME_WINDOW_TITLE)
+        if window:
+            _, wx, wy, ww, wh = window
+            print(f"[OK] Janela '{config.GAME_WINDOW_TITLE}' encontrada: ({wx},{wy}) {ww}x{wh}")
+        else:
+            print(f"[!] Janela '{config.GAME_WINDOW_TITLE}' não encontrada!")
+            print("[!] Usando tela completa como fallback.")
+        
+        print("A janela do jogo será capturada automaticamente em 5 segundos...")
         print("")
         
         # Countdown
@@ -29,10 +43,10 @@ class Calibrator:
             print(f"Capturando em {i}...", end='\r', flush=True)
             time.sleep(1)
         
-        print("\n✓ Capturando tela!")
+        print("\n✓ Capturando janela do jogo!")
         
-        # Captura screenshot
-        screenshot = self.capture.capture()
+        # Captura apenas a janela do jogo
+        screenshot = self.capture.capture_game_window()
         self.current_screenshot = screenshot.copy()
         
         # Salvar screenshot para referência
@@ -81,7 +95,7 @@ class Calibrator:
             h = abs(y2 - y1)
             
             region = (x, y, w, h)
-            print(f"\n✓ Região selecionada: {region}")
+            print(f"\n✓ Região selecionada (relativa à janela do jogo): {region}")
             print(f"Cole isso no config.py:")
             print(f"MINIGAME_REGION = {region}")
             
@@ -103,10 +117,10 @@ class Calibrator:
             self.selecting = False
             
     def detect_color_at_click(self):
-        """Detecta a cor HSV de onde você clica"""
+        """Detecta a cor HSV de onde você clica (captura da janela do jogo)"""
         print("\n=== CALIBRAÇÃO DE COR ===")
         print("Vá para o jogo com o elemento visível na tela!")
-        print("A tela será capturada automaticamente em 5 segundos...")
+        print("A janela do jogo será capturada automaticamente em 5 segundos...")
         print("")
         
         # Countdown
@@ -114,10 +128,10 @@ class Calibrator:
             print(f"Capturando em {i}...", end='\r', flush=True)
             time.sleep(1)
         
-        print("\n✓ Capturando tela!")
+        print("\n✓ Capturando janela do jogo!")
         print("Clique no elemento que quer detectar (peixe, círculo branco, etc)")
         
-        screenshot = self.capture.capture()
+        screenshot = self.capture.capture_game_window()
         hsv_screenshot = cv2.cvtColor(screenshot, cv2.COLOR_BGR2HSV)
         
         def click_callback(event, x, y, flags, param):
@@ -192,19 +206,32 @@ class Calibrator:
         cv2.destroyAllWindows()
         
     def get_screen_coordinates(self):
-        """Mostra as coordenadas do mouse em tempo real"""
-        print("\n=== COORDENADAS DO MOUSE (MÉTODO MANUAL) ===")
+        """Mostra as coordenadas do mouse em tempo real (relativas à janela do jogo)"""
+        print("\n=== COORDENADAS DO MOUSE (RELATIVAS À JANELA) ===")
+        
+        config = Config()
+        window = find_game_window(config.GAME_WINDOW_TITLE)
+        if window:
+            _, wx, wy, ww, wh = window
+            print(f"[OK] Janela encontrada em ({wx},{wy}) - {ww}x{wh}")
+        else:
+            print(f"[!] Janela '{config.GAME_WINDOW_TITLE}' não encontrada! Usando (0,0)")
+            wx, wy = 0, 0
+        
         print("\nVá para o jogo e posicione o mouse nos cantos do círculo do minigame:")
         print("1. Canto SUPERIOR ESQUERDO do círculo")
         print("2. Canto INFERIOR DIREITO do círculo")
-        print("\nAnote as coordenadas X e Y de cada posição")
-        print("\nPressione CTRL+C para sair quando terminar\n")
+        print("\nAs coordenadas mostradas são RELATIVAS à janela do jogo")
+        print("Pressione CTRL+C para sair quando terminar\n")
         print("-" * 50)
         
         try:
             while True:
                 x, y = pyautogui.position()
-                print(f"\rPosição: X={x:4d} Y={y:4d}    ", end='', flush=True)
+                # Calcular coordenadas relativas à janela
+                rel_x = x - wx
+                rel_y = y - wy
+                print(f"\rTela: X={x:4d} Y={y:4d}  |  Janela: X={rel_x:4d} Y={rel_y:4d}    ", end='', flush=True)
                 
                 if keyboard.is_pressed('esc'):
                     break
@@ -215,7 +242,8 @@ class Calibrator:
         print("\n\n" + "="*50)
         print("COMO CALCULAR A REGIÃO:")
         print("="*50)
-        print("\nSuponha que você anotou:")
+        print("\nAs coordenadas 'Janela' são relativas ao jogo.")
+        print("Supponha que você anotou (coordenadas Janela):")
         print("  Canto superior esquerdo: X=800, Y=300")
         print("  Canto inferior direito:  X=1100, Y=600")
         print("\nCalcule:")
