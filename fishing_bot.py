@@ -24,7 +24,20 @@ class FishingBot:
         pyautogui.PAUSE = 0.1
         
         print("Bot de Pesca Inicializado!")
-        print("Pressione J para iniciar/pausar")
+        print(f"Resolução do jogo: {self.config.GAME_WIDTH}x{self.config.GAME_HEIGHT} (janela)")
+        print(f"Procurando janela: '{self.config.GAME_WINDOW_TITLE}'")
+        
+        # Verificar se encontra a janela do jogo
+        from vision import find_game_window
+        window = find_game_window(self.config.GAME_WINDOW_TITLE)
+        if window:
+            _, wx, wy, ww, wh = window
+            print(f"[OK] Janela encontrada em ({wx}, {wy}) - {ww}x{wh}")
+        else:
+            print(f"[!] Janela '{self.config.GAME_WINDOW_TITLE}' NÃO encontrada!")
+            print("[!] Certifique-se de que o jogo está aberto antes de iniciar.")
+        
+        print("\nPressione J para iniciar/pausar")
         print("Pressione ESC para parar completamente")
         
     def start(self):
@@ -81,57 +94,65 @@ class FishingBot:
         return False
         
     def play_minigame(self):
-        """Executa o minigame de seguir a borda branca do círculo"""
+        """Executa o minigame de seguir o peixe"""
         print("[4/5] Jogando minigame...")
         start_time = time.time()
-        movements = 0
-        
+        movements  = 0
+        no_detect  = 0
+
         while (time.time() - start_time) < self.config.MINIGAME_DURATION and self.running:
             # Captura a região do minigame
             screenshot = self.screen_capture.capture_region(
                 self.config.MINIGAME_REGION
             )
-            
-            # Encontra a posição da borda branca (centro do círculo alvo)
+
+            # Encontra a posição do peixe (blob escuro)
             target_pos = self.fish_detector.find_white_circle_position(screenshot)
-            
+
             if target_pos:
+                no_detect = 0
                 # Ajustar para coordenadas absolutas da tela
+                # (região é relativa à janela, + offset da janela na tela)
+                offset_x, offset_y = self.screen_capture.get_game_offset()
                 x, y = target_pos
-                screen_x = self.config.MINIGAME_REGION[0] + x
-                screen_y = self.config.MINIGAME_REGION[1] + y
-                
+                screen_x = offset_x + self.config.MINIGAME_REGION[0] + x
+                screen_y = offset_y + self.config.MINIGAME_REGION[1] + y
+
                 # Mover o mouse suavemente
                 pyautogui.moveTo(screen_x, screen_y, duration=0.08)
                 movements += 1
-            
+
+                # Log a cada 20 movimentos
+                if movements % 20 == 1:
+                    elapsed = time.time() - start_time
+                    print(f"  [PEIXE] pos=({x},{y}) tela=({screen_x},{screen_y}) mov={movements} t={elapsed:.1f}s")
+            else:
+                no_detect += 1
+                # Aviso a cada 2 segundos sem detecção (40 frames × 0.05s)
+                if no_detect % 40 == 1:
+                    elapsed = time.time() - start_time
+                    print(f"  [!] Peixe NÃO detectado — verifique cores no config.py (t={elapsed:.1f}s)")
+
             time.sleep(0.05)  # 50ms entre checks
+
+        print(f"[✓] Minigame completo! ({movements} movimentos, sem detecção: {no_detect}x)")
         
-        print(f"[✓] Minigame completo! ({movements} movimentos)")
-        time.sleep(1.5)
+    def collect_fish(self):
+        """Coleta o peixe após o minigame - aperta E múltiplas vezes para garantir"""
+        print(f"[5/5] Aguardando {self.config.COLLECT_DELAY}s para coletar o peixe...")
+        time.sleep(self.config.COLLECT_DELAY)
         
-    def check_result(self):
-        """Verifica se a pesca foi bem-sucedida ou se o peixe escapou"""
-        print("[5/5] Verificando resultado...")
-        time.sleep(1)  # Aguardar mensagem aparecer
-        
-        # Verificar sucesso
-        if self.fish_detector.detect_success():
-            print("[✓✓✓] SUCESSO! Coletando peixe...")
+        print(f"[5/5] Coletando peixe (apertando E x{self.config.COLLECT_PRESSES})...")
+        for i in range(self.config.COLLECT_PRESSES):
             pydirectinput.press(self.config.COLLECT_KEY)
-            time.sleep(2)
-            self.fish_caught += 1
-            return True
+            time.sleep(self.config.COLLECT_PRESS_INTERVAL)
         
-        # Verificar falha
-        if self.fish_detector.detect_failure():
-            print("[X] Peixe escapou!")
-            return False
+        self.fish_caught += 1
+        print(f"[✓✓✓] Peixe #{self.fish_caught} coletado!")
         
-        # Se não detectou nada, assumir sucesso por segurança
-        print("[?] Resultado incerto, assumindo sucesso...")
-        pydirectinput.press(self.config.COLLECT_KEY)
-        time.sleep(2)
+        # Cooldown pós-coleta antes de iniciar novo ciclo
+        print(f"[...] Aguardando {self.config.CYCLE_DELAY}s antes do próximo ciclo...")
+        time.sleep(self.config.CYCLE_DELAY)
         return True
     
     def run_fishing_cycle(self):
@@ -151,16 +172,10 @@ class FishingBot:
                 # Passo 4: Jogar minigame
                 self.play_minigame()
                 
-                # Passo 5: Verificar resultado
-                if self.check_result():
-                    print(f"\n[SUCCESS] Peixe #{self.fish_caught} capturado!")
-                else:
-                    print(f"\n[FAIL] Tentativa falhou, reiniciando...")
+                # Passo 5: Coletar o peixe
+                self.collect_fish()
                 
                 print("-" * 40)
-                
-                # Pequeno delay entre ciclos
-                time.sleep(self.config.CYCLE_DELAY)
                 
             except Exception as e:
                 print(f"[ERRO] {str(e)}")
