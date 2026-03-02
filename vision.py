@@ -1,29 +1,118 @@
 """
 Módulo de Visão Computacional para detecção de elementos na tela
+Suporte a modo janela: detecta a janela do jogo e usa coordenadas relativas
 """
 import cv2
 import numpy as np
 import pyautogui
 from PIL import ImageGrab
+import win32gui
+import win32con
+
+
+def find_game_window(title_keyword="FiveM"):
+    """
+    Encontra a janela do jogo pelo título.
+    Retorna (hwnd, x, y, width, height) ou None.
+    """
+    result = []
+    
+    def enum_callback(hwnd, _):
+        if win32gui.IsWindowVisible(hwnd):
+            window_title = win32gui.GetWindowText(hwnd)
+            if title_keyword.lower() in window_title.lower():
+                rect = win32gui.GetWindowRect(hwnd)
+                x, y, x2, y2 = rect
+                # Ajustar para a área cliente (sem bordas/titlebar)
+                try:
+                    client_rect = win32gui.GetClientRect(hwnd)
+                    import win32api
+                    import ctypes
+                    
+                    # Converter coordenadas do cliente para coordenadas de tela
+                    class POINT(ctypes.Structure):
+                        _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+                    
+                    pt = POINT(0, 0)
+                    ctypes.windll.user32.ClientToScreen(hwnd, ctypes.byref(pt))
+                    
+                    client_w = client_rect[2] - client_rect[0]
+                    client_h = client_rect[3] - client_rect[1]
+                    
+                    result.append((hwnd, pt.x, pt.y, client_w, client_h))
+                except:
+                    # Fallback: usar rect completo
+                    w = x2 - x
+                    h = y2 - y
+                    result.append((hwnd, x, y, w, h))
+    
+    win32gui.EnumWindows(enum_callback, None)
+    
+    if result:
+        # Retornar a maior janela encontrada (provavelmente a principal)
+        result.sort(key=lambda r: r[3] * r[4], reverse=True)
+        return result[0]
+    return None
+
 
 class ScreenCapture:
-    """Captura de tela otimizada"""
+    """Captura de tela otimizada com suporte a modo janela"""
     
     def __init__(self):
         self.screen_size = pyautogui.size()
+        self._game_window = None  # Cache da posição da janela
+        self._last_window_check = 0
+        
+    def _get_game_window(self):
+        """Obtém a posição da janela do jogo (com cache de 1 segundo)"""
+        import time
+        now = time.time()
+        if self._game_window is None or (now - self._last_window_check) > 1.0:
+            from config import Config
+            config = Config()
+            self._game_window = find_game_window(config.GAME_WINDOW_TITLE)
+            self._last_window_check = now
+        return self._game_window
+    
+    def get_game_offset(self):
+        """Retorna (offset_x, offset_y) da janela do jogo na tela"""
+        window = self._get_game_window()
+        if window:
+            _, x, y, w, h = window
+            return (x, y)
+        # Fallback: sem offset (tela cheia)
+        return (0, 0)
         
     def capture(self):
         """Captura a tela completa"""
         screenshot = pyautogui.screenshot()
         return cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
     
+    def capture_game_window(self):
+        """Captura apenas a janela do jogo"""
+        window = self._get_game_window()
+        if window:
+            _, x, y, w, h = window
+            screenshot = ImageGrab.grab(bbox=(x, y, x + w, y + h))
+            return cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
+        # Fallback: captura tela inteira
+        return self.capture()
+    
     def capture_region(self, region):
         """
-        Captura uma região específica da tela
-        region: (x, y, width, height)
+        Captura uma região específica RELATIVA À JANELA DO JOGO
+        region: (x, y, width, height) - coordenadas relativas ao jogo
         """
-        x, y, width, height = region
-        screenshot = ImageGrab.grab(bbox=(x, y, x + width, y + height))
+        rx, ry, width, height = region
+        
+        # Obter offset da janela do jogo
+        offset_x, offset_y = self.get_game_offset()
+        
+        # Converter para coordenadas absolutas da tela
+        abs_x = offset_x + rx
+        abs_y = offset_y + ry
+        
+        screenshot = ImageGrab.grab(bbox=(abs_x, abs_y, abs_x + width, abs_y + height))
         return cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
 
 
@@ -74,68 +163,45 @@ class FishDetector:
     
     def find_white_circle_position(self, screenshot):
         """
-        Encontra a posição da BORDA BRANCA do círculo (alvo único)
-        Retorna (x, y) ou None
+        Encontra a posição do PEIXE (blob escuro) dentro do minigame.
+        Usa detecção por cor HSV + maior contorno (blob sólido).
+        Retorna (x, y) ou None.
         """
         from config import Config
         config = Config()
-        
+
         hsv = cv2.cvtColor(screenshot, cv2.COLOR_BGR2HSV)
-        
-        # Detectar APENAS borda branca
+
         lower = np.array(config.TARGET_CIRCLE_LOWER)
         upper = np.array(config.TARGET_CIRCLE_UPPER)
-        mask = cv2.inRange(hsv, lower, upper)
-        
-        # NÃO aplicar morfologia - queremos manter as bordas finas!
-        # Blur leve para suavizar e estabilizar detecção
-        mask = cv2.GaussianBlur(mask, (5, 5), 0)
-        
-        # Encontrar círculos (borda branca forma um círculo)
-        circles = cv2.HoughCircles(
-            mask, 
-            cv2.HOUGH_GRADIENT, 
-            dp=1, 
-            minDist=50,     # Distância mínima entre círculos
-            param1=30,      # Reduzido para detectar bordas mais fracas
-            param2=12,      # Reduzido para aceitar círculos menos perfeitos
-            minRadius=8,    # Raio mínimo da borda
-            maxRadius=40    # Raio máximo da borda
-        )
-        
-        if circles is not None:
-            circles = np.uint16(np.around(circles))
-            # Retornar o centro do primeiro círculo encontrado
-            x, y, r = circles[0][0]
-            return (int(x), int(y))
-        
-        # Fallback: usar contornos para encontrar o centro do círculo
+        mask  = cv2.inRange(hsv, lower, upper)
+
+        # Morfologia: fecha buracos pequenos no blob do peixe
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        mask   = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+
+        # Encontrar contornos
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        if contours:
-            from config import Config
-            config = Config()
-            
-            # Filtrar contornos por área mínima
-            valid_contours = [c for c in contours if cv2.contourArea(c) > config.DETECTION_THRESHOLD]
-            
-            if valid_contours:
-                # Pegar todos os contornos válidos e calcular o centro médio
-                all_points = []
-                for contour in valid_contours:
-                    M = cv2.moments(contour)
-                    if M["m00"] != 0:
-                        cx = int(M["m10"] / M["m00"])
-                        cy = int(M["m01"] / M["m00"])
-                        all_points.append((cx, cy))
-                
-                if all_points:
-                    # Retornar o ponto médio de todos os contornos (centro do círculo)
-                    avg_x = int(sum(p[0] for p in all_points) / len(all_points))
-                    avg_y = int(sum(p[1] for p in all_points) / len(all_points))
-                    return (avg_x, avg_y)
-        
-        return None
+
+        if not contours:
+            return None
+
+        # Pegar o MAIOR contorno (é o peixe)
+        largest = max(contours, key=cv2.contourArea)
+        area    = cv2.contourArea(largest)
+
+        # Ignorar ruído — mínimo de 30 pixels de área
+        if area < 30:
+            return None
+
+        # Centroide do blob
+        M = cv2.moments(largest)
+        if M["m00"] == 0:
+            return None
+
+        cx = int(M["m10"] / M["m00"])
+        cy = int(M["m01"] / M["m00"])
+        return (cx, cy)
     
     def detect_success(self):
         """
