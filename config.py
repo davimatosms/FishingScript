@@ -4,6 +4,15 @@ AJUSTE ESTES VALORES PARA O SEU SERVIDOR
 """
 
 class Config:
+    # ===== JANELA DO JOGO =====
+    # Título da janela do jogo (usado para encontrar automaticamente)
+    # Para FiveM/Prodigy RP, geralmente contém "FiveM" ou "GTA"
+    GAME_WINDOW_TITLE = "FiveM"
+    
+    # Resolução do jogo em modo janela
+    GAME_WIDTH = 1904
+    GAME_HEIGHT = 1041
+    
     # ===== TECLAS DO JOGO =====
     # Tecla para equipar a vara de pescar
     FISHING_ROD_KEY = '1'  # Prodigy RP
@@ -18,19 +27,31 @@ class Config:
     # Tempo máximo para esperar um peixe morder (segundos)
     BITE_TIMEOUT = 30
     
-    # Duração do minigame (segundos)
-    MINIGAME_DURATION = 15
+    # Duração do minigame (segundos) - aumentado para suportar 3 peixes
+    MINIGAME_DURATION = 25
     
-    # Delay entre ciclos de pesca (segundos)
+    # Cooldown após minigame acabar, antes de coletar o peixe (segundos)
+    COLLECT_DELAY = 3
+    
+    # Quantas vezes apertar E para garantir coleta do peixe
+    COLLECT_PRESSES = 3
+    
+    # Intervalo entre cada pressionamento de E na coleta (segundos)
+    COLLECT_PRESS_INTERVAL = 0.5
+    
+    # Delay após coletar o peixe, antes de iniciar novo ciclo (segundos)
     CYCLE_DELAY = 2
     
-    # ===== REGIÕES DA TELA =====
+    # ===== REGIÕES DA TELA (RELATIVAS À JANELA DO JOGO) =====
+    # Formato: (x, y, largura, altura) - coordenadas RELATIVAS à janela do jogo
+    # Baseado em resolução 1904x1041
+    
     # Região do minigame circular (centro-direita da tela)
-    # Formato: (x, y, largura, altura) para 1920x1080
-    MINIGAME_REGION = (1207, 401, 284, 279)  # Calibrado manualmente
+    # Expandida para cobrir cor clicada em (1480,656) com folga
+    MINIGAME_REGION = (1140, 360, 380, 320)
     
     # Região da notificação azul (canto superior direito)
-    NOTIFICATION_REGION = (1100, 40, 250, 100)
+    NOTIFICATION_REGION = (1091, 39, 248, 96)
     
     # ===== DETECÇÃO VISUAL =====
     # Cores para detectar (em HSV)
@@ -39,10 +60,11 @@ class Config:
     NOTIFICATION_COLOR_LOWER = [85, 100, 100]
     NOTIFICATION_COLOR_UPPER = [100, 255, 255]
     
-    # BORDA CLARA do círculo dentro do peixe alvo
-    # Detecta cinza claro azulado: HSV[105,46,112] vs peixe preto HSV[104,234,12]
-    TARGET_CIRCLE_LOWER = [90, 0, 70]      # H=90-120 azulado amplo, S=0-120, V>70
-    TARGET_CIRCLE_UPPER = [120, 120, 220]  # Faixa mais ampla para detecção estável
+    # COR DO PEIXE ALVO - calibrado via debug_vision
+    # Azul-preto saturado: corpo escuro do peixe no minigame
+    # H=91-121 (azul-esverdeado), S=154-234 (muito saturado), V=0-65 (escuro/preto)
+    TARGET_CIRCLE_LOWER = [91, 154, 0]
+    TARGET_CIRCLE_UPPER = [121, 234, 65]
     
     # Círculo azul do minigame (fundo)
     BLUE_CIRCLE_LOWER = [90, 80, 80]
